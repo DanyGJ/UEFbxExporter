@@ -16,7 +16,7 @@ class OBJECT_OT_NewAsset(bpy.types.Operator):
         name="Show Name",
         default=True,
         description="Toggle display of the dummy's name in the viewport"
-    )
+    )# type: ignore
 
     dummy_size: EnumProperty(
         name="Dummy Size",
@@ -27,8 +27,8 @@ class OBJECT_OT_NewAsset(bpy.types.Operator):
             ('100', "1.00", "Set dummy size to 1.00"),
         ],
         default='025',
-        description="Default size of the dummy"
-    )
+        description="Default dummy size"
+    )# type: ignore
 
     def draw(self, context):
         layout = self.layout

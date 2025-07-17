@@ -3,6 +3,7 @@ import os
 from bpy.types import Panel, Menu, Operator
 from bpy.props import StringProperty
 from ..operators.new import OBJECT_OT_NewAsset  # Add this import
+from ..operators.import_move import QS_OT_import_latest_sm_fbx_to_cursor  # Import the new operator
 
 
 class WM_OT_placeholder(Operator):
@@ -29,21 +30,25 @@ class OT_SelectExportPath(Operator):
     ) # type: ignore
 
     def invoke(self, context, event):
+        self.directory = context.scene.export_path or "//"
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        # Normalize and store whatever the user picked
-        path = bpy.path.abspath(self.directory)
-        context.scene.export_path = path
-        self.report({'INFO'}, f"Export path set to: {path}")
+        # Debug output to Blender's console
+        print(f"DEBUG: self.directory = {self.directory!r}")
+        if isinstance(self.directory, str) and self.directory:
+            path = bpy.path.abspath(self.directory)
+            context.scene.export_path = path
+            self.report({'INFO'}, f"Export path set to: {path}")
+        else:
+            self.report({'WARNING'}, "No directory selected.")
         return {'FINISHED'}
 
 # -----------------------------------------------------------------------------
 # Update logic for export path label
 # -----------------------------------------------------------------------------
 def update_label(export_path):
-    """Update logic for export path label."""
     if not export_path:
         return None
     return export_path
@@ -52,12 +57,10 @@ def update_label(export_path):
 # Callback to refresh the UI when export_path is updated
 # -----------------------------------------------------------------------------
 def update_export_path(self, context):
-    """Callback to refresh the UI when export_path is updated."""
     for window in context.window_manager.windows:
         for area in window.screen.areas:
             if area.type == 'VIEW_3D':
                 area.tag_redraw()
-
 # -----------------------------------------------------------------------------
 # N-Panel for Exporter Settings
 # -----------------------------------------------------------------------------
@@ -70,11 +73,18 @@ class VIEW3D_PT_ExporterSettings(Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-
+        addon = bpy.context.preferences.addons.get("UEFbxExporter")
+        prefs = addon.preferences if addon else None
+        # Show the default as a hint if scene.export_path is empty
+        if prefs and not scene.export_path and prefs.export_path:
+            box = layout.box()
+            row = box.row()
+            row.alignment = 'CENTER'
+            row.enabled = False
+            row.label(text=f"General path: {prefs.export_path}")
         row = layout.row(align=True)
-        row.prop(scene, "export_path", text="Path")
+        row.prop(scene, "export_path", text="Override Path")
         row.operator("wm.select_export_path", text="", icon='FILE_FOLDER')
-
 # -----------------------------------------------------------------------------
 # Pie Menu definition
 # -----------------------------------------------------------------------------
@@ -92,18 +102,30 @@ class VIEW3D_MT_PieMenu(Menu):
         border = box.box()
         border.label(text=update_label(context.scene.export_path), icon='NONE')
 
-        # A small grid of placeholders
+         # A small grid of placeholders (without Import SM_)
         box = col.box()
         grid = box.grid_flow(columns=3, align=True, row_major=False)
-        grid.operator("object.new_asset", text="New")
-        grid.operator("wm.placeholder", text="Ref")
-        grid.operator("wm.placeholder", text="Sockets")
+        grid.operator("object.new_asset", text="New Asset", icon='MESH_CUBE')
+        grid.operator("object.create_ref_hierarchy", text="Ref")
+        grid.operator("object.create_socket", text="Sockets", icon='SOCKET')
         grid.operator("wm.placeholder", text="Extra 1")
         grid.operator("wm.placeholder", text="Extra 2")
         grid.operator("wm.placeholder", text="Extra 3")
 
         # Right: export action
         pie.operator("export_scene.ue_fbx", text="Export", icon='TRIA_RIGHT')
+
+        # Bottom:
+        pie.operator("wm.placeholder", text="Bottom", icon='QUESTION')
+
+        # Top:
+        pie.operator("wm.placeholder", text="Top", icon='QUESTION')
+
+        #Top Left
+        pie.operator("wm.placeholder", text="Top Left", icon='QUESTION')
+        # Top Right
+        pie.operator("qs.import_latest_sm_fbx_to_cursor", text="Import SM_", icon='IMPORT')
+
 
 # -----------------------------------------------------------------------------
 # Keymap (F10)
@@ -120,7 +142,7 @@ def register_keymap():
         addon_keymaps.append((km, kmi))
 
 def unregister_keymap():
-    for km, kmi in addon_keymaps:
+    for km, kmi in addon_keymaps:a
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
 
@@ -132,26 +154,34 @@ classes = (
     OT_SelectExportPath,
     VIEW3D_PT_ExporterSettings,
     VIEW3D_MT_PieMenu,
+    QS_OT_import_latest_sm_fbx_to_cursor,  # Register the new operator
 )
 
 def register():
     # Add scene property for export_path with an update callback
-    bpy.types.Scene.export_path = StringProperty(
-        name="Export Path",
-        description="Path to export FBX files",
-        default="",
-        update=update_export_path
-    )
-    # Register all classes
+    if not hasattr(bpy.types.Scene, 'export_path'):
+        bpy.types.Scene.export_path = StringProperty(
+            name="Export Path",
+            description="Path to export FBX files",
+            default="",
+            update=update_export_path
+        )
     for cls in classes:
-        bpy.utils.register_class(cls)
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError:
+            pass  # Already registered
     register_keymap()
 
 def unregister():
     unregister_keymap()
     for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
-    del bpy.types.Scene.export_path
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass  # Not registered
+    if hasattr(bpy.types.Scene, 'export_path'):
+        del bpy.types.Scene.export_path
 
 if __name__ == "__main__":
     register()

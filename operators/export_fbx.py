@@ -1,26 +1,33 @@
 import bpy
 import os
 
-class ExportFBXOperator(bpy.types.Operator):
-    """Export selected objects to FBX"""
-    bl_idname = "export_scene.ue_fbx"  # Changed from fbx_custom to ue_fbx
-    bl_label = "Export FBX"
+class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
+    bl_idname = "export_scene.ue_fbx"
+    bl_label = "Export UE FBX"
+    bl_description = "Export selected hierarchy as FBX using parent dummy name"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        # Export selected objects to FBX
-        # Get export path from add-on preferences
-        addon_prefs = bpy.context.preferences.addons["UEFbxExporter"].preferences
-        export_path = addon_prefs.export_path
+        # Determine export directory from prefs or scene override
+        prefs = context.preferences.addons[__package__].preferences
+        scene = context.scene
+        export_dir = getattr(scene, 'fbx_export_override_path', '') or prefs.export_path
+        export_dir = bpy.path.abspath(export_dir)
 
-        # Check if the export path is valid
-        if not export_path or not os.path.isdir(export_path):
-            self.report({'WARNING'}, "Invalid export path.")
-            return {'CANCELLED'}
+        # Find parent dummy name for filename
+        active = context.active_object
+        if active and active.parent and active.parent.type == 'EMPTY':
+            base_name = active.parent.name
+        else:
+            base_name = bpy.path.clean_name(bpy.path.display_name_from_filepath(bpy.data.filepath)) or "exported_scene"
 
-        path_to_export = os.path.join(export_path, "exported_scene.fbx")
+        # Ensure export_dir exists
+        os.makedirs(export_dir, exist_ok=True)
+        filepath = os.path.join(export_dir, f"{base_name}.fbx")
+
+        # Perform export
         bpy.ops.export_scene.fbx(
-            filepath=path_to_export,
+             filepath=filepath,
             use_selection=True,
             check_existing=True,
             filter_glob="*.fbx",
@@ -32,7 +39,7 @@ class ExportFBXOperator(bpy.types.Operator):
             object_types={'ARMATURE', 'MESH', 'OTHER'},
             use_mesh_modifiers=True,
             use_mesh_modifiers_render=True,
-            mesh_smooth_type='OFF',
+            mesh_smooth_type=prefs.mesh_smooth_type,
             use_subsurf=False,
             use_mesh_edges=False,
             use_tspace=False,
@@ -51,14 +58,21 @@ class ExportFBXOperator(bpy.types.Operator):
             axis_up='Z'
         )
 
-        self.report({'INFO'}, f"Exported FBX to {export_path}")
+        self.report({'INFO'}, f"Exported FBX to {filepath}")
         return {'FINISHED'}
 
+    def invoke(self, context, event):
+        # optional: show file browser, but using prefs+scene path
+        return self.execute(context)
+
+# Registration
+
 def register():
-    bpy.utils.register_class(ExportFBXOperator)
+    bpy.utils.register_class(OBJECT_OT_ExportUEFbx)
+
 
 def unregister():
-    bpy.utils.unregister_class(ExportFBXOperator)
+    bpy.utils.unregister_class(OBJECT_OT_ExportUEFbx)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     register()

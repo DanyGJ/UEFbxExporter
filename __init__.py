@@ -15,12 +15,16 @@ bl_info = {
 
 from .operators import export_fbx
 from .operators import new
+from .operators import create_ref
+from .operators import sockets
 from .ui import pie_menu
-
+from . import ui
 modules = (
     export_fbx,
     pie_menu,
-    new
+    new,
+    create_ref,
+    sockets
 )
 
 # ------------------------------------------------------------------------
@@ -59,11 +63,13 @@ class UEFbxExporterPreferences(AddonPreferences):
 
 def register():
     bpy.utils.register_class(UEFbxExporterPreferences)
+    ui.register()
     for mod in modules:
         mod.register()
 
 def unregister():
     bpy.utils.unregister_class(UEFbxExporterPreferences)
+    ui.unregister()
     for mod in reversed(modules):
         mod.unregister()
 
