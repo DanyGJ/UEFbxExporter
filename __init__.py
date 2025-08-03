@@ -17,6 +17,9 @@ from .operators import export_fbx
 from .operators import new
 from .operators import create_ref
 from .operators import sockets
+from .operators import clean
+from .operators import move_cursor_boundX
+from .operators import quick_weld
 from .ui import pie_menu
 from . import ui
 modules = (
@@ -24,7 +27,10 @@ modules = (
     pie_menu,
     new,
     create_ref,
-    sockets
+    sockets,
+    clean,
+    move_cursor_boundX,
+    quick_weld,
 )
 
 # ------------------------------------------------------------------------

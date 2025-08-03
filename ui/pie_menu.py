@@ -106,17 +106,17 @@ class VIEW3D_MT_PieMenu(Menu):
         box = col.box()
         grid = box.grid_flow(columns=3, align=True, row_major=False)
         grid.operator("object.new_asset", text="New Asset", icon='MESH_CUBE')
-        grid.operator("object.create_ref_hierarchy", text="Ref")
-        grid.operator("object.create_socket", text="Sockets", icon='SOCKET')
-        grid.operator("wm.placeholder", text="Extra 1")
-        grid.operator("wm.placeholder", text="Extra 2")
-        grid.operator("wm.placeholder", text="Extra 3")
+        grid.operator("object.create_ref_hierarchy", text="Create Ref" , icon='OUTLINER_OB_EMPTY')
+        grid.operator("object.create_socket", text="Sockets", icon='NODE')
+        grid.operator("object.cursor_to_bbox_max_x", text="Cursor bound X", icon='CURSOR')
+        grid.operator("object.clean_object_data", text="Clean", icon='TRASH')
+        grid.operator("object.quick_weld", text="Quick Weld", icon='AUTOMERGE_ON')
 
         # Right: export action
         pie.operator("export_scene.ue_fbx", text="Export", icon='TRIA_RIGHT')
 
         # Bottom:
-        pie.operator("wm.placeholder", text="Bottom", icon='QUESTION')
+        op = pie.operator("wm.placeholder", text="Bottom", icon='QUESTION')
 
         # Top:
         pie.operator("wm.placeholder", text="Top", icon='QUESTION')
@@ -137,12 +137,12 @@ def register_keymap():
     kc = wm.keyconfigs.addon
     if kc:
         km = kc.keymaps.new(name="3D View", space_type='VIEW_3D')
-        kmi = km.keymap_items.new("wm.call_menu_pie", type='F10', value='PRESS')
+        kmi = km.keymap_items.new("wm.call_menu_pie", type='MIDDLEMOUSE', value='PRESS', alt=True)
         kmi.properties.name = VIEW3D_MT_PieMenu.bl_idname
         addon_keymaps.append((km, kmi))
 
 def unregister_keymap():
-    for km, kmi in addon_keymaps:a
+    for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
 
