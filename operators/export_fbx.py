@@ -78,52 +78,69 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
         os.makedirs(export_dir, exist_ok=True)
         filepath = os.path.join(export_dir, f"{base_name}.fbx")
 
-        if getattr(self, "shift", False): 
-            bpy.ops.export_mesh.stl(
-                filepath=filepath.replace('.fbx', '.stl'),
-                use_selection=True,
-                global_scale=1.0,
-                ascii=False,
-                use_mesh_modifiers=True,
-                batch_mode='OFF',
-                axis_forward='Y',
-                axis_up='Z'
-            )
-            msg = f"Exporting STL to {filepath}"
+        # --- Begin: Zero dummy location/rotation ---
+        dummy = active.parent if active and active.parent else None
+        orig_loc = orig_rot = None
+        if dummy:
+            orig_loc = dummy.location.copy()
+            orig_rot = dummy.rotation_euler.copy()
+            dummy.location = (0.0, 0.0, 0.0)
+            dummy.rotation_euler = (0.0, 0.0, 0.0)
+            bpy.context.view_layer.update()
+        # --- End: Zero dummy location/rotation ---
 
-        else:
-            bpy.ops.export_scene.fbx(
-                filepath=filepath,
-                use_selection=True,
-                check_existing=True,
-                filter_glob="*.fbx",
-                use_active_collection=False,
-                global_scale=1.0,
-                apply_unit_scale=True,
-                apply_scale_options='FBX_SCALE_NONE',
-                bake_space_transform=False,
-                object_types={'ARMATURE', 'MESH', 'OTHER'},
-                use_mesh_modifiers=True,
-                use_mesh_modifiers_render=True,
-                mesh_smooth_type=prefs.mesh_smooth_type,
-                use_subsurf=False,
-                use_mesh_edges=False,
-                use_tspace=False,
-                use_custom_props=False,
-                add_leaf_bones=True,
-                primary_bone_axis='Y',
-                secondary_bone_axis='X',
-                use_armature_deform_only=False,
-                path_mode='AUTO',
-                embed_textures=False,
-                batch_mode='OFF',
-                use_batch_own_dir=True,
-                use_metadata=True,
-                use_triangles=True,
-                axis_forward='Y',
-                axis_up='Z'
-            )
-            msg = f"Exported FBX to {filepath}"
+        try:
+            if getattr(self, "shift", False): 
+                bpy.ops.export_mesh.stl(
+                    filepath=filepath.replace('.fbx', '.stl'),
+                    use_selection=True,
+                    global_scale=1.0,
+                    ascii=False,
+                    use_mesh_modifiers=True,
+                    batch_mode='OFF',
+                    axis_forward='Y',
+                    axis_up='Z'
+                )
+                msg = f"Exporting STL to {filepath}"
+            else:
+                bpy.ops.export_scene.fbx(
+                    filepath=filepath,
+                    use_selection=True,
+                    check_existing=True,
+                    filter_glob="*.fbx",
+                    use_active_collection=False,
+                    global_scale=1.0,
+                    apply_unit_scale=True,
+                    apply_scale_options='FBX_SCALE_NONE',
+                    bake_space_transform=False,
+                    object_types={'ARMATURE', 'MESH', 'OTHER'},
+                    use_mesh_modifiers=True,
+                    use_mesh_modifiers_render=True,
+                    mesh_smooth_type=prefs.mesh_smooth_type,
+                    use_subsurf=False,
+                    use_mesh_edges=False,
+                    use_tspace=False,
+                    use_custom_props=False,
+                    add_leaf_bones=True,
+                    primary_bone_axis='Y',
+                    secondary_bone_axis='X',
+                    use_armature_deform_only=False,
+                    path_mode='AUTO',
+                    embed_textures=False,
+                    batch_mode='OFF',
+                    use_batch_own_dir=True,
+                    use_metadata=True,
+                    use_triangles=True,
+                    axis_forward='Y',
+                    axis_up='Z'
+                )
+                msg = f"Exported FBX to {filepath}"
+        finally:
+            # --- Restore dummy location/rotation ---
+            if dummy and orig_loc is not None and orig_rot is not None:
+                dummy.location = orig_loc
+                dummy.rotation_euler = orig_rot
+                bpy.context.view_layer.update()
 
         self.report({'INFO'}, msg)
         return {'FINISHED'}
