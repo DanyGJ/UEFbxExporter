@@ -34,7 +34,8 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
         for mesh in new_objs:
             if mesh.type == 'MESH':
                 orig_name = mesh.name
-                empty_name = orig_name[3:] if orig_name.startswith('SM_') else orig_name
+                # Keep the SM_ prefix
+                empty_name = orig_name
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.ops.object.empty_add(type='CUBE')
                 empty = context.active_object
