@@ -1,3 +1,23 @@
+# ------------------------------------------------------------------------
+# Changelog
+# ------------------------------------------------------------------------
+# Changelog Template:
+#
+# ## [Unreleased]
+# - 
+#
+# ## [0.3.0] - Various improvements
+# - 
+#
+# ## [0.2.0] - Various fixes
+# - Fixed export path not being saved
+# - Improved mesh smoothing options 
+#
+# ## [0.1.0] - Initial release
+# 
+#
+# (Replace YYYY-MM-DD with the release date and add changes under each version)
+
 import bpy
 from bpy.props import StringProperty, EnumProperty
 from bpy.types import AddonPreferences, Operator
@@ -5,7 +25,7 @@ from bpy.types import AddonPreferences, Operator
 bl_info = {
     "name": "UE FBX Exporter",
     "author": "Dan",
-    "version": (0, 1, 0),
+    "version": (0, 3, 0),
     "blender": (4, 0, 0),
     "location": "File > Export > UE FBX Exporter",
     "description": "Export FBX files for Unreal Engine with custom settings",
