@@ -34,16 +34,17 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
         for mesh in new_objs:
             if mesh.type == 'MESH':
                 orig_name = mesh.name
-                # Keep the SM_ prefix
-                empty_name = orig_name
+                # Rename mesh data to generic to free up the name for the empty
+                mesh.data.name = 'Mesh'
+                mesh.name = 'Mesh'
+                # Now create the empty with the original name
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.ops.object.empty_add(type='CUBE')
                 empty = context.active_object
-                empty.name = empty_name
+                empty.name = orig_name
                 empty.empty_display_size = 0.25
                 empty.show_name = True
                 mesh.parent = empty
                 mesh.matrix_parent_inverse = empty.matrix_world.inverted()
-                mesh.name = 'Mesh'
         self.report({'INFO'}, f"Imported '{os.path.basename(latest_file)}' and parented under empties at cursor with name display")
         return {'FINISHED'}

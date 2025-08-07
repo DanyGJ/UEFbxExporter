@@ -89,6 +89,21 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
             bpy.context.view_layer.update()
         # --- End: Zero dummy location/rotation ---
 
+        # --- Force mesh update to ensure geometry is available ---
+        bpy.context.view_layer.update()
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        mesh_found = False
+        for obj in context.selected_objects:
+            if obj.type == 'MESH':
+                _ = obj.evaluated_get(depsgraph).to_mesh()
+                mesh_found = True
+        # If no mesh was selected, try evaluating children of active object
+        if not mesh_found and active:
+            for child in active.children:
+                if child.type == 'MESH':
+                    _ = child.evaluated_get(depsgraph).to_mesh()
+        # --------------------------------------------------------
+
         try:
             if getattr(self, "shift", False): 
                 bpy.ops.export_mesh.stl(
@@ -106,7 +121,7 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
                 bpy.ops.export_scene.fbx(
                     filepath=filepath,
                     use_selection=True,
-                    check_existing=True,
+                    check_existing=False,
                     filter_glob="*.fbx",
                     use_active_collection=False,
                     global_scale=1.0,
