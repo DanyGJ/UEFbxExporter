@@ -3,8 +3,8 @@
 # ------------------------------------------------------------------------
 # Changelog Template:
 #
-# ## [Unreleased]
-# - 
+# ## [0.4.0]
+# - Fixed import_move operator to correctly name imported objects
 #
 # ## [0.3.0] - Various improvements
 # - 
@@ -25,7 +25,7 @@ from bpy.types import AddonPreferences, Operator
 bl_info = {
     "name": "UE FBX Exporter",
     "author": "Dan",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (4, 0, 0),
     "location": "File > Export > UE FBX Exporter",
     "description": "Export FBX files for Unreal Engine with custom settings",
