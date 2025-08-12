@@ -26,6 +26,42 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
         )
 
     def execute(self, context):
+        # --- New: Handle Local View (Isolated) Mode ---
+        def get_view3d_override(ctx):
+            for area in ctx.window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'WINDOW':
+                            return {
+                                'window': ctx.window,
+                                'screen': ctx.screen,
+                                'area': area,
+                                'region': region,
+                                'scene': ctx.scene,
+                                'space_data': area.spaces.active
+                            }
+            return None
+
+        view3d_override = get_view3d_override(context)
+        local_view_active = False
+        local_view_objects = []
+        selected_before = []
+        active_before = None
+
+        if view3d_override:
+            space = view3d_override['space_data']
+            # When in local view, space.local_view is not None
+            if getattr(space, "local_view", None) is not None:
+                local_view_active = True
+                local_view_objects = list(context.visible_objects)
+                selected_before = list(context.selected_objects)
+                active_before = context.view_layer.objects.active
+                # Exit local view so export sees full scene hierarchy
+                try:
+                    bpy.ops.view3d.localview(view3d_override, frame_selected=False)
+                except Exception as e:
+                    print(f"[UEFbxExporter] Failed to exit Local View automatically: {e}")
+
         prefs = context.preferences.addons["UEFbxExporter"].preferences
         scene = context.scene
 
@@ -89,19 +125,95 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
             bpy.context.view_layer.update()
         # --- End: Zero dummy location/rotation ---
 
-        # --- Force mesh update to ensure geometry is available ---
+        # --- Robust geometry validation & force evaluation ---
         bpy.context.view_layer.update()
         depsgraph = bpy.context.evaluated_depsgraph_get()
-        mesh_found = False
-        for obj in context.selected_objects:
-            if obj.type == 'MESH':
-                _ = obj.evaluated_get(depsgraph).to_mesh()
-                mesh_found = True
-        # If no mesh was selected, try evaluating children of active object
-        if not mesh_found and active:
-            for child in active.children:
-                if child.type == 'MESH':
-                    _ = child.evaluated_get(depsgraph).to_mesh()
+
+        def gather_candidate_mesh_objects():
+            sel_mesh = [o for o in context.selected_objects if o.type == 'MESH']
+            if sel_mesh:
+                return sel_mesh
+            # If no mesh directly selected, look at active object's children (one level)
+            if active:
+                child_mesh = [c for c in active.children if c.type == 'MESH']
+                if child_mesh:
+                    return child_mesh
+            return []
+
+        candidates = gather_candidate_mesh_objects()
+        valid_mesh_objects = []
+        problem_objects = []
+
+        # If still none, we cannot export
+        if not candidates:
+            # Restore dummy before cancelling
+            if dummy and orig_loc is not None and orig_rot is not None:
+                dummy.location = orig_loc
+                dummy.rotation_euler = orig_rot
+                bpy.context.view_layer.update()
+            self.report({'ERROR'}, "No mesh objects selected or in active hierarchy to export.")
+            return {'CANCELLED'}
+
+        for obj in candidates:
+            if not obj.visible_get():
+                continue
+            eval_obj = obj.evaluated_get(depsgraph)
+            tmp_mesh = None
+            try:
+                # Try evaluated mesh (modifiers applied in depsgraph)
+                try:
+                    tmp_mesh = eval_obj.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+                except TypeError:
+                    # Fallback for older Blender versions
+                    tmp_mesh = eval_obj.to_mesh()
+                if not tmp_mesh or len(tmp_mesh.vertices) == 0 or len(tmp_mesh.polygons) == 0:
+                    problem_objects.append(obj.name)
+                else:
+                    valid_mesh_objects.append(obj)
+            except Exception as e:
+                problem_objects.append(f"{obj.name} (err: {e})")
+            finally:
+                if eval_obj and tmp_mesh:
+                    eval_obj.to_mesh_clear()
+
+        if not valid_mesh_objects:
+            # Attempt a final forced update (some modifiers update only after tag)
+            for o in candidates:
+                if o.type == 'MESH' and o.data:
+                    o.data.update()
+            bpy.context.view_layer.update()
+
+            # Re-check one more time quickly
+            retry_valid = False
+            for obj in candidates:
+                if obj.type != 'MESH':
+                    continue
+                eval_obj = obj.evaluated_get(depsgraph)
+                tmp_mesh = None
+                try:
+                    try:
+                        tmp_mesh = eval_obj.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+                    except TypeError:
+                        tmp_mesh = eval_obj.to_mesh()
+                    if tmp_mesh and len(tmp_mesh.polygons) > 0 and len(tmp_mesh.vertices) > 0:
+                        retry_valid = True
+                        break
+                finally:
+                    if eval_obj and tmp_mesh:
+                        eval_obj.to_mesh_clear()
+
+            if not retry_valid:
+                if dummy and orig_loc is not None and orig_rot is not None:
+                    dummy.location = orig_loc
+                    dummy.rotation_euler = orig_rot
+                    bpy.context.view_layer.update()
+                detail = ", ".join(problem_objects) if problem_objects else "No geometry produced"
+                self.report({'ERROR'}, f"Aborting export: no valid mesh geometry (0 faces). Problem objects: {detail}")
+                return {'CANCELLED'}
+
+        # Optional warning if some meshes were empty
+        if problem_objects:
+            self.report({'WARNING'}, f"Ignoring empty/invalid meshes: {', '.join(problem_objects)}")
         # --------------------------------------------------------
 
         try:
@@ -156,6 +268,31 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
                 dummy.location = orig_loc
                 dummy.rotation_euler = orig_rot
                 bpy.context.view_layer.update()
+
+            # --- New: Restore Local View if it was active ---
+            if local_view_active and view3d_override:
+                try:
+                    # Re-enter local view using original isolated objects
+                    bpy.ops.object.select_all(action='DESELECT')
+                    for o in local_view_objects:
+                        if o.name in bpy.data.objects:
+                            o.select_set(True)
+                    # Ensure an active object for the operator
+                    if active_before and active_before.name in bpy.data.objects:
+                        context.view_layer.objects.active = active_before
+                    elif local_view_objects:
+                        context.view_layer.objects.active = local_view_objects[0]
+                    bpy.ops.view3d.localview(view3d_override, frame_selected=False)
+
+                    # Restore original selection inside the re-isolated view
+                    bpy.ops.object.select_all(action='DESELECT')
+                    for o in selected_before:
+                        if o.name in bpy.data.objects:
+                            o.select_set(True)
+                    if active_before and active_before.name in bpy.data.objects:
+                        context.view_layer.objects.active = active_before
+                except Exception as e:
+                    print(f"[UEFbxExporter] Failed to restore Local View: {e}")
 
         self.report({'INFO'}, msg)
         return {'FINISHED'}

@@ -1,13 +1,23 @@
 # ------------------------------------------------------------------------
 # Changelog
 # ------------------------------------------------------------------------
-# Changelog Template:
+# ## [0.5.3]
+# - Export: Temporarily exits Local View (isolated) to ensure proper export, then restores it.
+#
+# ## [0.5.2]
+# - Updated import_move: existing parent objects renamed to .001 so new import keeps base name
+#
+# ## [0.5.1]
+# - Fixed import_move operator to correctly name imported objects
+#
+# ## [0.5.0]
+# - Improved geometry validation and error reporting
 #
 # ## [0.4.0]
 # - Fixed import_move operator to correctly name imported objects
 #
 # ## [0.3.0] - Various improvements
-# - 
+# - Improved handling of empty mesh objects
 #
 # ## [0.2.0] - Various fixes
 # - Fixed export path not being saved
@@ -25,7 +35,7 @@ from bpy.types import AddonPreferences, Operator
 bl_info = {
     "name": "UE FBX Exporter",
     "author": "Dan",
-    "version": (0, 4, 0),
+    "version": (0, 5, 3),
     "blender": (4, 0, 0),
     "location": "File > Export > UE FBX Exporter",
     "description": "Export FBX files for Unreal Engine with custom settings",
