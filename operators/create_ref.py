@@ -48,7 +48,9 @@ class OBJECT_OT_CreateRefHierarchy(bpy.types.Operator):
         # Identify new root by original name prefix
         new_root = next((o for o in dup_objs if o.name.startswith(root.name)), None)
         if new_root:
-            new_root.name = f"REF_{root.name}"
+            # Only add REF_ if not already prefixed
+            if not root.name.lower().startswith("ref_"):
+                new_root.name = f"REF_{root.name}"
 
         # 3. Create or get 'Instance' material
         mat = bpy.data.materials.get("Instance")

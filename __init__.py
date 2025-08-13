@@ -1,6 +1,12 @@
 # ------------------------------------------------------------------------
 # Changelog
 # ------------------------------------------------------------------------
+# ## [0.5.5]
+# - ImportMove: Accept BP_SM_ prefixed FBX files in addition to SM_
+#
+# ## [0.5.4]
+# - CreateRef: Do not add REF_ prefix if already present
+#
 # ## [0.5.3]
 # - Export: Temporarily exits Local View (isolated) to ensure proper export, then restores it.
 #
@@ -35,7 +41,7 @@ from bpy.types import AddonPreferences, Operator
 bl_info = {
     "name": "UE FBX Exporter",
     "author": "Dan",
-    "version": (0, 5, 3),
+    "version": (0, 5, 5),
     "blender": (4, 0, 0),
     "location": "File > Export > UE FBX Exporter",
     "description": "Export FBX files for Unreal Engine with custom settings",

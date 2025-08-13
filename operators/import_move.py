@@ -7,15 +7,21 @@ TEMP_DIR = r"C:\Users\daniel.baena\Desktop\Temp"
 
 # --- Import Latest "SM_*.fbx" Operator ---
 class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
-    """Import the most recent FBX starting with 'SM_' and snap it to the cursor"""
+    """Import the most recent FBX starting with 'SM_' or 'BP_SM_' and snap it to the cursor"""
     bl_idname = "qs.import_latest_sm_fbx_to_cursor"
-    bl_label = "Import Latest SM_ FBX to Cursor"
+    bl_label = "Import Latest SM_/BP_SM FBX to Cursor"
 
     def execute(self, context):
-        pattern = os.path.join(TEMP_DIR, "SM_*.fbx")
-        files = glob.glob(pattern)
+        # New: accept both SM_ and BP_SM_ prefixed FBX files
+        patterns = [
+            os.path.join(TEMP_DIR, "SM_*.fbx"),
+            os.path.join(TEMP_DIR, "BP_SM_*.fbx"),
+        ]
+        files = []
+        for p in patterns:
+            files.extend(glob.glob(p))
         if not files:
-            self.report({'WARNING'}, f"No FBX files found matching 'SM_*.fbx' in {TEMP_DIR}")
+            self.report({'WARNING'}, f"No FBX files found matching 'SM_*.fbx' or 'BP_SM_*.fbx' in {TEMP_DIR}")
             return {'CANCELLED'}
         latest_file = max(files, key=os.path.getmtime)
         fbx_name = os.path.splitext(os.path.basename(latest_file))[0]
