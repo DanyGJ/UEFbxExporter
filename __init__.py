@@ -1,39 +1,3 @@
-# ------------------------------------------------------------------------
-# Changelog
-# ------------------------------------------------------------------------
-# ## [0.5.5]
-# - ImportMove: Accept BP_SM_ prefixed FBX files in addition to SM_
-#
-# ## [0.5.4]
-# - CreateRef: Do not add REF_ prefix if already present
-#
-# ## [0.5.3]
-# - Export: Temporarily exits Local View (isolated) to ensure proper export, then restores it.
-#
-# ## [0.5.2]
-# - Updated import_move: existing parent objects renamed to .001 so new import keeps base name
-#
-# ## [0.5.1]
-# - Fixed import_move operator to correctly name imported objects
-#
-# ## [0.5.0]
-# - Improved geometry validation and error reporting
-#
-# ## [0.4.0]
-# - Fixed import_move operator to correctly name imported objects
-#
-# ## [0.3.0] - Various improvements
-# - Improved handling of empty mesh objects
-#
-# ## [0.2.0] - Various fixes
-# - Fixed export path not being saved
-# - Improved mesh smoothing options 
-#
-# ## [0.1.0] - Initial release
-# 
-#
-# (Replace YYYY-MM-DD with the release date and add changes under each version)
-
 import bpy
 from bpy.props import StringProperty, EnumProperty
 from bpy.types import AddonPreferences, Operator
@@ -41,7 +5,7 @@ from bpy.types import AddonPreferences, Operator
 bl_info = {
     "name": "UE FBX Exporter",
     "author": "Dan",
-    "version": (0, 5, 5),
+    "version": (0, 5, 7),
     "blender": (4, 0, 0),
     "location": "File > Export > UE FBX Exporter",
     "description": "Export FBX files for Unreal Engine with custom settings",
@@ -84,6 +48,40 @@ class UEFbxExporterPreferences(AddonPreferences):
     ) # type: ignore
 
     mesh_smooth_type: bpy.props.EnumProperty(
+        name="Mesh Smooth Type",
+        description="Smoothing type for exported meshes",
+        items=[
+            ('OFF', "Off", "No smoothing"),
+            ('FACE', "Face", "Face smoothing"),
+            ('EDGE', "Edge", "Edge smoothing")
+        ],
+        default='FACE'
+    ) # type: ignore
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "export_path")
+        layout.prop(self, "mesh_smooth_type")
+
+# ------------------------------------------------------------------------
+# Register
+# ------------------------------------------------------------------------
+
+def register():
+    bpy.utils.register_class(UEFbxExporterPreferences)
+    ui.register()
+    for mod in modules:
+        mod.register()
+
+def unregister():
+    bpy.utils.unregister_class(UEFbxExporterPreferences)
+    ui.unregister()
+    for mod in reversed(modules):
+        mod.unregister()
+
+if __name__ == "__main__":
+    register()
+    bpy.types.Scene.mesh_smooth_type = bpy.props.EnumProperty(
         name="Mesh Smooth Type",
         description="Smoothing type for exported meshes",
         items=[

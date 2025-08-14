@@ -35,12 +35,12 @@ class OBJECT_OT_clean_object_data(bpy.types.Operator):
 
         # Disable auto smooth
         mesh.use_auto_smooth = False
-        # Remove all UV maps
-        for uv in list(mesh.uv_layers):
-            mesh.uv_layers.remove(uv)
-        # Remove all vertex colors
-        for vcol in list(mesh.vertex_colors):
-            mesh.vertex_colors.remove(vcol)
+        # Remove all UV maps (safe removal by always using fresh references)
+        while len(mesh.uv_layers) > 0:
+            mesh.uv_layers.remove(mesh.uv_layers[0])
+        # Remove all vertex colors (safe removal by always using fresh references)
+        while len(mesh.vertex_colors) > 0:
+            mesh.vertex_colors.remove(mesh.vertex_colors[0])
         # Recursively remove all non-required custom attributes
         removed = True
         while removed:

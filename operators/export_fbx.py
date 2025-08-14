@@ -112,7 +112,10 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
 
         # Ensure export_dir exists
         os.makedirs(export_dir, exist_ok=True)
-        filepath = os.path.join(export_dir, f"{base_name}.fbx")
+        # Choose extension based on Shift (STL) or default (FBX)
+        use_stl = getattr(self, "shift", False)
+        ext = ".stl" if use_stl else ".fbx"
+        filepath = os.path.join(export_dir, f"{base_name}{ext}")
 
         # --- Begin: Zero dummy location/rotation ---
         dummy = active.parent if active and active.parent else None

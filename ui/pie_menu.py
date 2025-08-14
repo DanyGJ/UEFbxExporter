@@ -14,6 +14,61 @@ class WM_OT_placeholder(Operator):
     def execute(self, context):
         self.report({'INFO'}, "Placeholder operator executed")
         return {'FINISHED'}
+
+# New: operator used just to provide a tooltip + optional copy-to-clipboard
+class WM_OT_show_export_path(Operator):
+    bl_idname = "wm.show_export_path"
+    bl_label = "Export Path"
+    bl_description = "Show or copy export path"
+    path: StringProperty(options={'HIDDEN'})  # full path for tooltip/copy
+
+    @classmethod
+    def description(cls, context, properties):
+        p = getattr(properties, "path", "") or ""
+        clip = getattr(getattr(context, "window_manager", None), "clipboard", "") if context else ""
+        current = p if p else "No export path set"
+        clip_disp = clip if clip else "Clipboard empty"
+        return (
+            "Click: paste path from clipboard into Export Path. "
+            "Shift-click: copy current Export Path to clipboard.\n"
+            f"Current: {current}\nClipboard: {clip_disp}"
+        )
+
+    def invoke(self, context, event):
+        scene = context.scene
+        current_path = self.path or getattr(scene, "export_path", "") or ""
+        if event.shift:
+            if current_path:
+                context.window_manager.clipboard = current_path
+                self.report({'INFO'}, "Export path copied to clipboard")
+            else:
+                self.report({'WARNING'}, "No export path set")
+            return {'FINISHED'}
+
+        # Default: paste from clipboard
+        clip = (context.window_manager.clipboard or "").strip()
+        if not clip:
+            self.report({'WARNING'}, "Clipboard is empty")
+            return {'CANCELLED'}
+
+        pasted = bpy.path.abspath(clip)
+        scene.export_path = pasted
+        if os.path.isdir(pasted):
+            self.report({'INFO'}, "Export path pasted from clipboard")
+        else:
+            self.report({'WARNING'}, "Pasted value is not an existing directory; set anyway")
+        return {'FINISHED'}
+
+    def execute(self, context):
+        # Fallback to paste if invoked without event
+        clip = (context.window_manager.clipboard or "").strip()
+        if not clip:
+            self.report({'WARNING'}, "Clipboard is empty")
+            return {'CANCELLED'}
+        context.scene.export_path = bpy.path.abspath(clip)
+        self.report({'INFO'}, "Export path pasted from clipboard")
+        return {'FINISHED'}
+
 # -----------------------------------------------------------------------------
 # Folder-picker operator (works from Npanel)
 # -----------------------------------------------------------------------------
@@ -53,6 +108,18 @@ def update_label(export_path):
         return None
     return export_path
 
+# New: shorten long paths for display
+def abbreviate_path(path: str, max_len: int = 50, keep_segments: int = 3) -> str:
+    if not path:
+        return "No Export Path"
+    p = bpy.path.abspath(path)
+    if len(p) <= max_len:
+        return p
+    parts = os.path.normpath(p).split(os.sep)
+    tail = os.sep.join(parts[-keep_segments:]) if len(parts) >= keep_segments else parts[-1]
+    prefix = parts[0] + os.sep if os.name == 'nt' and ':' in parts[0] else ""
+    return f"{prefix}...{os.sep}{tail}"
+
 # -----------------------------------------------------------------------------
 # Callback to refresh the UI when export_path is updated
 # -----------------------------------------------------------------------------
@@ -61,6 +128,7 @@ def update_export_path(self, context):
         for area in window.screen.areas:
             if area.type == 'VIEW_3D':
                 area.tag_redraw()
+
 # -----------------------------------------------------------------------------
 # N-Panel for Exporter Settings
 # -----------------------------------------------------------------------------
@@ -82,9 +150,11 @@ class VIEW3D_PT_ExporterSettings(Panel):
             row.alignment = 'CENTER'
             row.enabled = False
             row.label(text=f"General path: {prefs.export_path}")
-        row = layout.row(align=True)
-        row.prop(scene, "export_path", text="Override Path")
-        row.operator("wm.select_export_path", text="", icon='FILE_FOLDER')
+        # Removed: Override Path field; it now lives in the 3D View header
+        # row = layout.row(align=True)
+        # row.prop(scene, "export_path", text="Override Path")
+        # row.operator("wm.select_export_path", text="", icon='FILE_FOLDER')
+
 # -----------------------------------------------------------------------------
 # Pie Menu definition
 # -----------------------------------------------------------------------------
@@ -95,14 +165,10 @@ class VIEW3D_MT_PieMenu(Menu):
     def draw(self, context):
         pie = self.layout.menu_pie()
 
-        # Left: show current export_path
         pie.operator_context = 'INVOKE_DEFAULT'
         col = pie.column()
-        box = col.box()
-        border = box.box()
-        border.label(text=update_label(context.scene.export_path), icon='NONE')
 
-         # A small grid of placeholders (without Import SM_)
+        # Keep the tools grid on the left
         box = col.box()
         grid = box.grid_flow(columns=3, align=True, row_major=False)
         grid.operator("object.new_asset", text="New Asset", icon='MESH_CUBE')
@@ -115,13 +181,24 @@ class VIEW3D_MT_PieMenu(Menu):
         # Right: export action
         pie.operator("export_scene.ue_fbx", text="Export", icon='TRIA_RIGHT')
 
-        # Bottom:
-        op = pie.operator("wm.placeholder", text="Bottom", icon='QUESTION')
+        # Bottom: Edit Mode overlay toggles
+        if context.mode == 'EDIT_MESH':
+            overlay = getattr(getattr(context, "space_data", None), "overlay", None)
+            if overlay:
+                box = pie.box()
+                box.label(text="Edge Info")
+                row = box.row(align=True)
+                row.prop(overlay, "show_extra_edge_length", text="Edge Length")
+                row.prop(overlay, "show_extra_edge_angle", text="Edge Angle")
+            else:
+                pie.label(text="Overlay not available")
+        else:
+            pie.operator("wm.placeholder", text="Bottom", icon='QUESTION')
 
         # Top:
         pie.operator("wm.placeholder", text="Top", icon='QUESTION')
 
-        #Top Left
+        # Top Left
         pie.operator("wm.placeholder", text="Top Left", icon='QUESTION')
         # Top Right
         pie.operator("qs.import_latest_sm_fbx_to_cursor", text="Import SM_", icon='IMPORT')
@@ -147,17 +224,45 @@ def unregister_keymap():
     addon_keymaps.clear()
 
 # -----------------------------------------------------------------------------
-# Registration
+# Topbar (upper bar): show Override Path next to GoB buttons
+# -----------------------------------------------------------------------------
+def draw_topbar_ue_export_path(self, context):
+    # Draw on the RIGHT side of the Topbar upper bar only
+    if getattr(context.region, "alignment", None) != 'RIGHT':
+        return
+    scene = context.scene if context and context.scene else None
+    if not scene or not hasattr(scene, "export_path"):
+        return
+    row = self.layout.row(align=True)
+    row.operator_context = 'INVOKE_DEFAULT'  # ensure Shift is handled
+    row.operator("wm.select_export_path", text="", icon='FILE_FOLDER')
+    display_text = abbreviate_path(scene.export_path)
+    op = row.operator("wm.show_export_path", text=display_text, icon='COPYDOWN')
+    op.path = scene.export_path
+
+# -----------------------------------------------------------------------------
+# Registration (single, cleaned, idempotent)
 # -----------------------------------------------------------------------------
 classes = (
     WM_OT_placeholder,
+    WM_OT_show_export_path,
     OT_SelectExportPath,
     VIEW3D_PT_ExporterSettings,
     VIEW3D_MT_PieMenu,
-    QS_OT_import_latest_sm_fbx_to_cursor,  # Register the new operator
+    QS_OT_import_latest_sm_fbx_to_cursor,
 )
 
 def register():
+    # Be idempotent: remove any previous hook/keymaps before (re)adding them
+    try:
+        bpy.types.TOPBAR_HT_upper_bar.remove(draw_topbar_ue_export_path)
+    except Exception:
+        pass
+    try:
+        unregister_keymap()
+    except Exception:
+        pass
+
     # Add scene property for export_path with an update callback
     if not hasattr(bpy.types.Scene, 'export_path'):
         bpy.types.Scene.export_path = StringProperty(
@@ -166,20 +271,44 @@ def register():
             default="",
             update=update_export_path
         )
+
+    # Register classes
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
         except ValueError:
             pass  # Already registered
+
+    # Keymap
     register_keymap()
 
+    # Hook into the Topbar upper bar BEFORE default items (Scene/View Layer)
+    try:
+        bpy.types.TOPBAR_HT_upper_bar.prepend(draw_topbar_ue_export_path)
+    except Exception:
+        pass
+
 def unregister():
-    unregister_keymap()
+    # Remove Topbar hook
+    try:
+        bpy.types.TOPBAR_HT_upper_bar.remove(draw_topbar_ue_export_path)
+    except Exception:
+        pass
+
+    # Keymap
+    try:
+        unregister_keymap()
+    except Exception:
+        pass
+
+    # Unregister classes
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
         except RuntimeError:
             pass  # Not registered
+
+    # Remove scene property
     if hasattr(bpy.types.Scene, 'export_path'):
         del bpy.types.Scene.export_path
 
