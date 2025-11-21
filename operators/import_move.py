@@ -126,3 +126,5 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
 
         self.report({'INFO'}, f"Imported '{os.path.basename(latest_file)}' and parented under '{fbx_name}' at cursor (materials deduplicated)")
         return {'FINISHED'}
+    
+    # End
