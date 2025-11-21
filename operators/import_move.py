@@ -1,6 +1,7 @@
 import bpy
 import os
 import glob
+import re  # New: regex for material name normalization
 
 # Directory to scan for FBX files
 TEMP_DIR = r"C:\Users\daniel.baena\Desktop\Temp"
@@ -25,6 +26,10 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
             return {'CANCELLED'}
         latest_file = max(files, key=os.path.getmtime)
         fbx_name = os.path.splitext(os.path.basename(latest_file))[0]
+
+        # Snapshot existing objects & materials before import
+        existing_objs_set = set(bpy.data.objects)
+        existing_mats_set = set(bpy.data.materials)
 
         # New: rename existing object with same name instead of deleting it
         existing_obj = bpy.data.objects.get(fbx_name)
@@ -74,7 +79,6 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
             o.parent = parent_empty
             o.matrix_parent_inverse = parent_empty.matrix_world.inverted()
             if o.type == 'MESH':
-                # Keep meshes generic so the parent can own the FBX file's name
                 o.data.name = 'Mesh'
                 o.name = 'Mesh'
 
@@ -91,5 +95,34 @@ class QS_OT_import_latest_sm_fbx_to_cursor(bpy.types.Operator):
                     idx += 1
             parent_empty.name = fbx_name
 
-        self.report({'INFO'}, f"Imported '{os.path.basename(latest_file)}' and parented under '{fbx_name}' at cursor")
+        # New: material de-duplication (remap imported duplicates to existing base materials)
+        new_materials = [m for m in bpy.data.materials if m not in existing_mats_set]
+        existing_by_name = {m.name: m for m in existing_mats_set}
+
+        def base_mat_name(name: str) -> str:
+            # Strip trailing .### from Blender duplicate naming
+            return re.sub(r"\.\d{3,}$", "", name)
+
+        for obj in new_objs:
+            if obj.type != 'MESH':
+                continue
+            for slot in obj.material_slots:
+                mat = slot.material
+                if not mat:
+                    continue
+                base_name = base_mat_name(mat.name)
+                # If this is a duplicate (has .###) and base exists, swap
+                if base_name != mat.name and base_name in existing_by_name:
+                    slot.material = existing_by_name[base_name]
+
+        # Attempt cleanup of now unused duplicate materials
+        for mat in new_materials:
+            base_name = base_mat_name(mat.name)
+            if base_name != mat.name and base_name in existing_by_name and mat.users == 0:
+                try:
+                    bpy.data.materials.remove(mat)
+                except Exception:
+                    pass
+
+        self.report({'INFO'}, f"Imported '{os.path.basename(latest_file)}' and parented under '{fbx_name}' at cursor (materials deduplicated)")
         return {'FINISHED'}
