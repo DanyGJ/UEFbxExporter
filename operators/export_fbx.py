@@ -101,6 +101,165 @@ class OBJECT_OT_ExportUEFbx(bpy.types.Operator):
             self.report({'WARNING'}, "No export path set in preferences or scene. Please set a valid export path.")
             return {'CANCELLED'}
 
+        # --- New: Export each selected root hierarchy separately ---
+        selected_roots = []
+        selected_objs = list(context.selected_objects) if context.selected_objects else []
+        if not selected_objs and context.active_object:
+            selected_objs = [context.active_object]
+        for o in selected_objs:
+            r = o
+            while r.parent:
+                r = r.parent
+            if r not in selected_roots:
+                selected_roots.append(r)
+
+        if len(selected_roots) > 1:
+            exported_count = 0
+            use_stl = getattr(self, "shift", False)
+            ext = ".stl" if use_stl else ".fbx"
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            saved_selection = list(context.selected_objects)
+            saved_active = context.view_layer.objects.active
+            try:
+                for root in selected_roots:
+                    # Build hierarchy selection
+                    group_objs = [root] + list(root.children_recursive)
+                    group_objs = [o for o in group_objs if o.visible_get()]
+
+                    # Validate: at least one non-empty mesh
+                    has_valid_mesh = False
+                    for obj in group_objs:
+                        if obj.type != 'MESH':
+                            continue
+                        eval_obj = obj.evaluated_get(depsgraph)
+                        tmp = None
+                        try:
+                            try:
+                                tmp = eval_obj.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+                            except TypeError:
+                                tmp = eval_obj.to_mesh()
+                            if tmp and len(tmp.polygons) > 0 and len(tmp.vertices) > 0:
+                                has_valid_mesh = True
+                                break
+                        finally:
+                            if eval_obj and tmp:
+                                eval_obj.to_mesh_clear()
+                    if not has_valid_mesh:
+                        continue
+
+                    # Reselect only this hierarchy
+                    bpy.ops.object.select_all(action='DESELECT')
+                    for o in group_objs:
+                        o.select_set(True)
+                    context.view_layer.objects.active = root
+
+                    # Temporary zero empty dummy root
+                    dummy = root if root.type == 'EMPTY' else None
+                    orig_loc = orig_rot = None
+                    if dummy:
+                        orig_loc = dummy.location.copy()
+                        orig_rot = dummy.rotation_euler.copy()
+                        dummy.location = (0.0, 0.0, 0.0)
+                        dummy.rotation_euler = (0.0, 0.0, 0.0)
+                        bpy.context.view_layer.update()
+
+                    # Build path and export
+                    os.makedirs(export_dir, exist_ok=True)
+                    base_name = root.name
+                    filepath = os.path.join(export_dir, f"{base_name}{ext}")
+
+                    if use_stl:
+                        bpy.ops.export_mesh.stl(
+                            filepath=filepath.replace('.fbx', '.stl'),
+                            use_selection=True,
+                            global_scale=1.0,
+                            ascii=False,
+                            use_mesh_modifiers=True,
+                            batch_mode='OFF',
+                            axis_forward='Y',
+                            axis_up='Z'
+                        )
+                    else:
+                        bpy.ops.export_scene.fbx(
+                            filepath=filepath,
+                            use_selection=True,
+                            check_existing=False,
+                            filter_glob="*.fbx",
+                            use_active_collection=False,
+                            global_scale=1.0,
+                            apply_unit_scale=True,
+                            apply_scale_options='FBX_SCALE_NONE',
+                            bake_space_transform=False,
+                            object_types={'ARMATURE', 'MESH', 'OTHER'},
+                            use_mesh_modifiers=True,
+                            use_mesh_modifiers_render=True,
+                            mesh_smooth_type=prefs.mesh_smooth_type,
+                            use_subsurf=False,
+                            use_mesh_edges=False,
+                            use_tspace=False,
+                            use_custom_props=False,
+                            add_leaf_bones=True,
+                            primary_bone_axis='Y',
+                            secondary_bone_axis='X',
+                            use_armature_deform_only=False,
+                            path_mode='AUTO',
+                            embed_textures=False,
+                            batch_mode='OFF',
+                            use_batch_own_dir=True,
+                            use_metadata=True,
+                            use_triangles=True,
+                            axis_forward='Y',
+                            axis_up='Z'
+                        )
+                    exported_count += 1
+
+                    # Restore dummy
+                    if dummy and orig_loc is not None and orig_rot is not None:
+                        dummy.location = orig_loc
+                        dummy.rotation_euler = orig_rot
+                        bpy.context.view_layer.update()
+            finally:
+                # Restore original selection
+                bpy.ops.object.select_all(action='DESELECT')
+                for o in saved_selection:
+                    if o.name in bpy.data.objects:
+                        o.select_set(True)
+                if saved_active and saved_active.name in bpy.data.objects:
+                    context.view_layer.objects.active = saved_active
+
+                # Restore Local View if it was active
+                if local_view_active and view3d_override:
+                    try:
+                        # Re-enter local view using original isolated objects
+                        bpy.ops.object.select_all(action='DESELECT')
+                        for o in local_view_objects:
+                            if o.name in bpy.data.objects:
+                                o.select_set(True)
+                        # Ensure an active object for the operator
+                        if active_before and active_before.name in bpy.data.objects:
+                            context.view_layer.objects.active = active_before
+                        elif local_view_objects:
+                            context.view_layer.objects.active = local_view_objects[0]
+                        bpy.ops.view3d.localview(view3d_override, frame_selected=False)
+
+                        # Restore original selection inside the re-isolated view
+                        bpy.ops.object.select_all(action='DESELECT')
+                        for o in selected_before:
+                            if o.name in bpy.data.objects:
+                                o.select_set(True)
+                        if active_before and active_before.name in bpy.data.objects:
+                            context.view_layer.objects.active = active_before
+                    except Exception as e:
+                        print(f"[UEFbxExporter] Failed to restore Local View: {e}")
+
+            if exported_count == 0:
+                self.report({'ERROR'}, "No valid meshes found to export from the current selection.")
+                return {'CANCELLED'}
+            else:
+                plural = "files" if exported_count != 1 else "file"
+                self.report({'INFO'}, f"Exported {exported_count} {plural} to {export_dir}")
+                return {'FINISHED'}
+
         # Find parent dummy name for filename
         active = context.active_object
         if active and active.parent:
