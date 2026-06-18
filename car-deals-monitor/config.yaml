@@ -1,0 +1,49 @@
+# Configuración de búsquedas de car-deals-monitor.
+# Copia este fichero a config.yaml y ajústalo a tu gusto.
+#
+# Cada entrada de 'searches' es una búsqueda independiente en un portal.
+# Portales incluidos: cochesnet, autoscout24, generic_html.
+# (lista los disponibles con:  python -m cardeals --list-portals)
+
+# Dónde se guarda el estado de anuncios ya vistos (se puede commitear en CI).
+state_path: data/seen.json
+
+searches:
+  # --- Coches.net: usa su API interna; filtros sencillos --------------------
+  - name: "BMW Serie 3 hasta 12.000€"
+    portal: cochesnet
+    max_results: 30
+    params:
+      text: "BMW Serie 3"
+      price_to: 12000
+      year_from: 2014
+      km_to: 150000
+
+  # --- AutoScout24: pega aquí la URL de tu búsqueda -------------------------
+  # Construye la búsqueda en https://www.autoscout24.es con tus filtros,
+  # ordénala por "Antigüedad del anuncio" y copia la URL resultante.
+  - name: "Audi A3 diésel hasta 15.000€"
+    portal: autoscout24
+    max_results: 30
+    params:
+      url: "https://www.autoscout24.es/lst/audi/a3?fuel=D&priceto=15000&sort=age&desc=1"
+
+  # --- Cualquier otro portal (ej. Flexicar) vía selectores CSS --------------
+  # Inspecciona la página de resultados (clic derecho > Inspeccionar) y
+  # rellena los selectores. native_id se deriva de la URL si no se indica.
+  - name: "Flexicar ejemplo (ajusta los selectores)"
+    portal: generic_html
+    enabled: false   # ponlo en true cuando hayas validado los selectores
+    max_results: 30
+    params:
+      url: "https://www.flexicar.es/coches-segunda-mano/"
+      portal: "flexicar"
+      base_url: "https://www.flexicar.es"
+      item_selector: "article.vehicle-card"
+      fields:
+        title: { selector: "h2" }
+        url:   { selector: "a", attr: "href" }
+        price: { selector: ".price", regex: "[0-9.]+" }
+        year:  { selector: ".year" }
+        km:    { selector: ".km", regex: "[0-9.]+" }
+        image: { selector: "img", attr: "src" }
